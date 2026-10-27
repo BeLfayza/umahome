@@ -4,7 +4,8 @@
 
 ## Browser Setup (Chrome)
 
-### [Chrome onStartup Settings](chrome://settings/onStartup)
+### Chrome onStartup Settings
+<chrome://settings/onStartup>
 
 Copy and paste this link like the image:
 
@@ -14,11 +15,13 @@ Copy and paste this link like the image:
 
 ## Browser Setup (Brave)
 
-### [Brave — Change New Tab Page to Homepage](brave://settings/)
+### Brave — Change New Tab Page to Homepage
+<brave://settings/>
 
 ![Brave Settings](image-4.png)
 
-### [Go to Brave Appearance Settings](brave://settings/appearance)
+### Go to Brave Appearance Settings
+<brave://settings/appearance>
 
 Copy and paste this link like the image:
 

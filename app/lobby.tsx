@@ -89,6 +89,7 @@ function CharacterSprite({
   const [facing, setFacing] = useState<"left" | "right">("right");
   const [walkDuration, setWalkDuration] = useState(4000);
   const positionRef = useRef(initialLeft);
+  const facingRef = useRef<"left" | "right" | null>(null);
   const layerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -127,18 +128,31 @@ function CharacterSprite({
       const currentPosition = positionRef.current;
       let nextPosition = randomBetween(minPosition, maxPosition);
 
-      if (Math.abs(nextPosition - currentPosition) < 12) {
-        nextPosition = currentPosition < (minPosition + maxPosition) / 2
-          ? randomBetween(Math.min(currentPosition + 12, maxPosition), maxPosition)
-          : randomBetween(minPosition, Math.max(currentPosition - 12, minPosition));
+      const shouldReverse = facingRef.current !== null && Math.random() < 0.2;
+      if (shouldReverse) {
+        const reverseDirection = facingRef.current === "left" ? "right" : "left";
+        const hasRoomToReverse = reverseDirection === "left"
+          ? currentPosition > minPosition
+          : currentPosition < maxPosition;
+
+        if (hasRoomToReverse) {
+          nextPosition = reverseDirection === "left"
+            ? randomBetween(minPosition, currentPosition)
+            : randomBetween(currentPosition, maxPosition);
+        }
       }
 
-      const distance = Math.abs(nextPosition - currentPosition) / 100 * viewportWidth;
-      const duration = Math.max(1800, Math.min(8500, distance / 65 * 1000));
+      if (nextPosition === currentPosition) {
+        nextPosition = currentPosition === maxPosition ? minPosition : maxPosition;
+      }
+
+      const duration = Math.floor(Math.random() * 15 + 1) * 1000;
       const nextBottom = randomBetween(4, 34);
+      const nextFacing = nextPosition < currentPosition ? "left" : "right";
 
       positionRef.current = nextPosition;
-      setFacing(nextPosition < currentPosition ? "left" : "right");
+      facingRef.current = nextFacing;
+      setFacing(nextFacing);
       setWalkDuration(duration);
       setWalking(true);
       setPosition(nextPosition);
@@ -147,11 +161,11 @@ function CharacterSprite({
       timer = window.setTimeout(() => {
         if (cancelled) return;
         setWalking(false);
-        timer = window.setTimeout(move, randomBetween(900, 2800));
+        timer = window.setTimeout(move, Math.floor(Math.random() * 15 + 1) * 1000);
       }, duration);
     };
 
-    timer = window.setTimeout(move, randomBetween(500, 2200));
+    timer = window.setTimeout(move, Math.floor(Math.random() * 15 + 1) * 1000);
 
     return () => {
       cancelled = true;

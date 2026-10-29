@@ -23,15 +23,17 @@ type LobbyVisibility = {
   count: boolean;
   tagline: boolean;
   characterNames: boolean;
+  characterLinks: boolean;
 };
 
 const displaySettings: { key: keyof LobbyVisibility; label: string }[] = [
-  { key: "title", label: "Lobby title" },
-  { key: "clock", label: "Clock" },
-  { key: "search", label: "Search bar" },
-  { key: "count", label: "Character count" },
-  { key: "tagline", label: "Footer tagline" },
-  { key: "characterNames", label: "Character names" },
+  { key: "title", label: "LOBBY TITLE" },
+  { key: "clock", label: "CLOCK & DATE" },
+  { key: "search", label: "SEARCH BAR" },
+  { key: "count", label: "CHARACTER COUNT" },
+  { key: "tagline", label: "FOOTER TAGLINE" },
+  { key: "characterNames", label: "CHARACTER NAMES" },
+  { key: "characterLinks", label: "ENABLE CLICKABLE CHARACTERS" },
 ];
 
 const defaultLobbyVisibility: LobbyVisibility = {
@@ -41,6 +43,7 @@ const defaultLobbyVisibility: LobbyVisibility = {
   count: true,
   tagline: true,
   characterNames: true,
+  characterLinks: true,
 };
 
 const backgroundStorageKey = "umahome-background";
@@ -55,21 +58,55 @@ function randomBetween(min: number, max: number) {
   return Math.random() * (max - min) + min;
 }
 
+type SpawnPosition = {
+  left: number;
+  bottom: number;
+};
+
+function getRandomSpawnPositions(count: number): SpawnPosition[] {
+  return Array.from({ length: count }, () => ({
+    left: randomBetween(8, 92),
+    bottom: randomBetween(4, 34),
+  }));
+}
+
 function CharacterSprite({
   character,
-  initialPosition,
+  initialLeft,
+  initialBottom,
   showName,
+  allowLink,
 }: {
   character: Character;
-  initialPosition: number;
+  initialLeft: number;
+  initialBottom: number;
   showName: boolean;
+  allowLink: boolean;
 }) {
-  const [position, setPosition] = useState(initialPosition);
-  const [bottom, setBottom] = useState(18);
+  const [position, setPosition] = useState(initialLeft);
+  const [bottom, setBottom] = useState(initialBottom);
   const [walking, setWalking] = useState(false);
   const [facing, setFacing] = useState<"left" | "right">("right");
   const [walkDuration, setWalkDuration] = useState(4000);
-  const positionRef = useRef(initialPosition);
+  const positionRef = useRef(initialLeft);
+  const layerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let frame = 0;
+
+    const updateDepth = () => {
+      const layer = layerRef.current;
+      if (layer) {
+        const { bottom: screenBottom } = layer.getBoundingClientRect();
+        layer.style.zIndex = String(Math.round(10000 + screenBottom * 10));
+      }
+
+      frame = window.requestAnimationFrame(updateDepth);
+    };
+
+    frame = window.requestAnimationFrame(updateDepth);
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -128,20 +165,16 @@ function CharacterSprite({
       : character.walkRight
     : character.stand;
 
-  const characterStyle = {
+  const layerStyle = {
     left: `${position}%`,
     bottom: `${bottom}%`,
-    transform: `translateX(-50%) scale(${0.88 + ((bottom - 4) / 30) * 0.18})`,
-    transitionDuration: `${walkDuration}ms`,
-  };
-  const shadowStyle = {
-    left: `${position}%`,
-    bottom: `calc(${bottom}% + ${showName ? 20 : 0}px)`,
-    transform: `translateX(-50%) scale(${0.88 + ((bottom - 4) / 30) * 0.18})`,
+    zIndex: 1,
+    transform: "translateX(-50%)",
     transitionDuration: `${walkDuration}ms`,
   };
   const characterContent = (
     <>
+      <span className={showName ? undefined : "is-hidden"}>{character.name}</span>
       <Image
         src={image}
         alt={character.name}
@@ -151,42 +184,12 @@ function CharacterSprite({
         loading="eager"
         draggable={false}
       />
-      {showName && <span>{character.name}</span>}
     </>
   );
 
-  if (character.link) {
-    return (
-      <>
-        <div className="lobby-character-shadow" style={shadowStyle} aria-hidden="true">
-          <Image
-            className="lobby-shadow-image"
-            src="/bayangan.svg"
-            alt=""
-            width={175}
-            height={48}
-            unoptimized
-            draggable={false}
-          />
-        </div>
-        <a
-          className="lobby-character"
-          style={characterStyle}
-          aria-label={`Open ${character.name}`}
-          href={character.link}
-          target="_blank"
-          rel="noopener noreferrer"
-          onContextMenu={(event) => event.preventDefault()}
-        >
-          {characterContent}
-        </a>
-      </>
-    );
-  }
-
   return (
-    <>
-      <div className="lobby-character-shadow" style={shadowStyle} aria-hidden="true">
+    <div ref={layerRef} className="lobby-character-layer" style={layerStyle}>
+      <div className="lobby-character-shadow" aria-hidden="true">
         <Image
           className="lobby-shadow-image"
           src="/bayangan.svg"
@@ -198,14 +201,23 @@ function CharacterSprite({
         />
       </div>
       <div
-        className="lobby-character"
-        style={characterStyle}
-        aria-label={character.name}
+        className={`lobby-character${character.link && allowLink ? " is-link" : ""}`}
+        style={{ transform: "translateY(-14px)" }}
         onContextMenu={(event) => event.preventDefault()}
       >
-        {characterContent}
+        {character.link && allowLink ? (
+          <a
+            className="lobby-character-link"
+            href={character.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Open ${character.name}`}
+          >
+            {characterContent}
+          </a>
+        ) : characterContent}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -217,11 +229,21 @@ export default function Lobby({
   backgrounds: Background[];
 }) {
   const [clock, setClock] = useState("");
+  const [date, setDate] = useState("");
   const [background, setBackground] = useState<string | null>(null);
   const [backgroundPanelOpen, setBackgroundPanelOpen] = useState(false);
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
   const [randomBackgroundOnRefresh, setRandomBackgroundOnRefresh] = useState(false);
   const [visibleElements, setVisibleElements] = useState(defaultLobbyVisibility);
+  const [spawnPositions, setSpawnPositions] = useState<SpawnPosition[] | null>(null);
+
+  useEffect(() => {
+    const spawnTimer = window.setTimeout(() => {
+      setSpawnPositions(getRandomSpawnPositions(characters.length));
+    }, 0);
+
+    return () => window.clearTimeout(spawnTimer);
+  }, [characters.length]);
 
   useEffect(() => {
     const restoreTimer = window.setTimeout(() => {
@@ -293,12 +315,19 @@ export default function Lobby({
 
   useEffect(() => {
     const updateClock = () => {
+      const now = new Date();
       setClock(new Intl.DateTimeFormat(undefined, {
         hour: "2-digit",
         minute: "2-digit",
         second: "2-digit",
         hourCycle: "h23",
-      }).format(new Date()));
+      }).format(now));
+      setDate(new Intl.DateTimeFormat(undefined, {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      }).format(now));
     };
 
     updateClock();
@@ -347,7 +376,10 @@ export default function Lobby({
         <div className="lobby-brand">
           {visibleElements.title && <p className="lobby-title">UMA <span>LOBBY</span></p>}
           {visibleElements.clock && (
-            <time className="lobby-clock" aria-label="Local time">{clock || "--:--:--"}</time>
+            <div className="lobby-datetime">
+              <time className="lobby-clock" aria-label="Local time">{clock || "--:--:--"}</time>
+              <time className="lobby-date" aria-label="Current date">{date}</time>
+            </div>
           )}
         </div>
         {visibleElements.search && (
@@ -376,12 +408,14 @@ export default function Lobby({
 
       <section className="lobby-scene" aria-label="Character lobby">
         {characters.length > 0 ? (
-          characters.map((character, index) => (
+          spawnPositions?.length === characters.length && characters.map((character, index) => (
             <CharacterSprite
               key={character.name}
               character={character}
-              initialPosition={((index + 1) / (characters.length + 1)) * 100}
+              initialLeft={spawnPositions[index].left}
+              initialBottom={spawnPositions[index].bottom}
               showName={visibleElements.characterNames}
+              allowLink={visibleElements.characterLinks}
             />
           ))
         ) : (
@@ -475,6 +509,41 @@ export default function Lobby({
               ))}
               <p className="settings-note">Character sprites always stay visible.</p>
             </section>
+            <button
+              className="change-background"
+              type="button"
+              aria-expanded={backgroundPanelOpen}
+              aria-controls="background-panel"
+              onClick={() => setBackgroundPanelOpen((open) => !open)}
+            >
+              <svg
+                className="change-background-icon"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                aria-hidden="true"
+              >
+                <rect
+                  x="3"
+                  y="4"
+                  width="18"
+                  height="16"
+                  rx="2"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                />
+                <circle cx="8.5" cy="9" r="1.5" fill="currentColor" />
+                <path
+                  d="m5 17 5-5 3 3 2-2 4 4"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span>CHANGE BACKGROUND</span>
+            </button>
             <div className="settings-actions">
               <a
                 className="settings-link"
@@ -490,15 +559,6 @@ export default function Lobby({
                 </svg>
                 <span>GITHUB</span>
               </a>
-              <button
-                className="change-background"
-                type="button"
-                aria-expanded={backgroundPanelOpen}
-                aria-controls="background-panel"
-                onClick={() => setBackgroundPanelOpen(true)}
-              >
-                CHANGE BACKGROUND
-              </button>
               <div className="force-refresh-option">
                 <p className="force-refresh-description">
                   Press CTRL + F5 if a new content is not loading

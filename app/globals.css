@@ -67,6 +67,13 @@ body {
   gap: 8px;
 }
 
+.lobby-datetime {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
 .lobby-title {
   margin: 0;
   font-size: 15px;
@@ -103,10 +110,16 @@ body {
 
 .lobby-clock {
   color: #fff;
-  font-size: 14px;
+  font-size: 18px;
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   letter-spacing: 0.12em;
+}
+
+.lobby-date {
+  color: #fff;
+  font-size: 10px;
+  letter-spacing: 0.08em;
 }
 
 .google-search {
@@ -192,53 +205,62 @@ body {
 
 .lobby-scene {
   position: absolute;
+  z-index: 1;
   inset: 0;
+}
+
+.lobby-character-layer {
+  position: absolute;
+  width: clamp(132px, 18vw, 225px);
+  transform: translateX(-50%);
+  transition:
+    left var(--walk-duration, 4s) linear,
+    bottom var(--walk-duration, 4s) linear;
 }
 
 .lobby-character-shadow {
   position: absolute;
   z-index: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   display: flex;
-  width: clamp(132px, 18vw, 225px);
   justify-content: center;
   pointer-events: none;
-  transform-origin: bottom center;
-  transition:
-    left var(--walk-duration, 4s) linear,
-    bottom var(--walk-duration, 4s) linear,
-    transform var(--walk-duration, 4s) linear;
 }
 
 .lobby-shadow-image {
   display: block;
-  width: 84%;
+  width: 65%;
   height: auto;
   filter: brightness(0.35);
 }
 
 .lobby-character {
-  position: absolute;
+  position: relative;
   z-index: 1;
-  bottom: 12%;
   display: flex;
-  width: clamp(132px, 18vw, 225px);
+  width: 100%;
   flex-direction: column;
   align-items: center;
   color: inherit;
   text-decoration: none;
-  transform: translateX(-50%);
-  transform-origin: bottom center;
-  transition:
-    left var(--walk-duration, 4s) linear,
-    bottom var(--walk-duration, 4s) linear,
-    transform var(--walk-duration, 4s) linear;
 }
 
-.lobby-character[href] {
+.lobby-character.is-link {
   cursor: pointer;
 }
 
-.lobby-character:focus-visible {
+.lobby-character-link {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  color: inherit;
+  text-decoration: none;
+}
+
+.lobby-character-link:focus-visible {
   outline: 1px solid #d4d4d8;
   outline-offset: 5px;
 }
@@ -255,11 +277,28 @@ body {
 }
 
 .lobby-character span {
-  margin-top: 8px;
-  color: #71717a;
-  font-size: 10px;
-  letter-spacing: 0.18em;
+  position: relative;
+  top: 35px;
+  margin-bottom: 2px;
+  padding: 2px 5px;
+  background: rgb(0 0 0 / 55%);
+  color: #fff;
+  font-family: var(--font-geist-mono), "Courier New", monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.25;
+  text-shadow:
+    -1px -1px 0 #000,
+    1px -1px 0 #000,
+    -1px 1px 0 #000,
+    1px 1px 0 #000,
+    0 2px 3px #000;
   white-space: nowrap;
+}
+
+.lobby-character .is-hidden {
+  visibility: hidden;
 }
 
 .lobby-footer {
@@ -342,6 +381,8 @@ body {
   width: var(--settings-panel-width);
   padding: clamp(22px, 5vw, 36px);
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   border-left: 1px solid #303036;
   background: #0c0c0f;
   transform: translateX(100%);
@@ -429,14 +470,16 @@ body {
 .settings-note {
   margin: 14px 0 0;
   color: #fff;
-  font-size: 11px;
+  font-size: 14px;
+  font-weight: 800;
   line-height: 1.6;
 }
 
 .settings-actions {
   display: grid;
   gap: 10px;
-  margin-top: 30px;
+  margin-top: auto;
+  padding-top: 30px;
 }
 
 .settings-link {
@@ -449,9 +492,20 @@ body {
   text-decoration: none;
 }
 
-.change-background {
+.settings-panel > .change-background {
+  display: flex;
+  width: 100%;
   min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin-top: 24px;
   padding: 11px 15px;
+}
+
+.change-background-icon {
+  display: block;
+  flex: 0 0 16px;
 }
 
 .settings-actions .force-refresh-option {
@@ -462,8 +516,8 @@ body {
 .settings-actions .force-refresh-description {
   margin: 0;
   color: #fff;
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 800;
   line-height: 1.45;
 }
 
@@ -656,8 +710,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lobby-character,
-  .lobby-character-shadow {
+  .lobby-character-layer {
     transition: none;
   }
 
@@ -707,7 +760,11 @@ body {
   }
 
   .lobby-clock {
-    font-size: 12px;
+    font-size: 15px;
+  }
+
+  .lobby-date {
+    font-size: 9px;
   }
 
   .lobby-footer {

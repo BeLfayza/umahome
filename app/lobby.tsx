@@ -33,7 +33,7 @@ const displaySettings: { key: keyof LobbyVisibility; label: string }[] = [
   { key: "count", label: "CHARACTER COUNT" },
   { key: "tagline", label: "FOOTER TAGLINE" },
   { key: "characterNames", label: "CHARACTER NAMES" },
-  { key: "characterLinks", label: "ENABLE CLICKABLE CHARACTERS" },
+  { key: "characterLinks", label: "CLICKABLE CHARACTERS INTRODUCTION VIDEOS" },
 ];
 
 const defaultLobbyVisibility: LobbyVisibility = {
@@ -49,6 +49,12 @@ const defaultLobbyVisibility: LobbyVisibility = {
 const backgroundStorageKey = "umahome-background";
 const randomBackgroundStorageKey = "umahome-random-background";
 const visibilityStorageKey = "umahome-visibility";
+const transitionDuration = 469;
+const sidebarRestoreStep = 500;
+const transitionImages = Array.from(
+  { length: 6 },
+  (_, index) => `/transisi/intro${index + 1}.png`,
+);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -244,6 +250,10 @@ export default function Lobby({
   const [randomBackgroundOnRefresh, setRandomBackgroundOnRefresh] = useState(false);
   const [visibleElements, setVisibleElements] = useState(defaultLobbyVisibility);
   const [spawnPositions, setSpawnPositions] = useState<SpawnPosition[] | null>(null);
+  const [transitionPhase, setTransitionPhase] = useState<"opening" | "closing" | null>("opening");
+  const [transitionFrame, setTransitionFrame] = useState(0);
+  const pendingBackground = useRef<string | null>(null);
+  const panelsAfterTransition = useRef<{ settings: boolean; background: boolean } | null>(null);
 
   useEffect(() => {
     const spawnTimer = window.setTimeout(() => {
@@ -252,6 +262,46 @@ export default function Lobby({
 
     return () => window.clearTimeout(spawnTimer);
   }, [characters.length]);
+
+  useEffect(() => {
+    if (transitionPhase === null) return;
+
+    const frameTimers = transitionImages.map((_, index) => window.setTimeout(() => {
+      if (index === transitionImages.length - 1) {
+        if (transitionPhase === "closing") {
+          setBackground(pendingBackground.current);
+          setTransitionFrame(0);
+          setTransitionPhase("opening");
+        } else {
+          setTransitionPhase(null);
+        }
+      } else {
+        setTransitionFrame(transitionPhase === "opening"
+          ? index + 1
+          : transitionImages.length - index - 2);
+      }
+    }, Math.round(((index + 1) * transitionDuration) / transitionImages.length)));
+
+    return () => frameTimers.forEach(window.clearTimeout);
+  }, [transitionPhase]);
+
+  useEffect(() => {
+    const panels = panelsAfterTransition.current;
+    if (transitionPhase !== null || panels === null) return;
+
+    const restoreSettingsPanel = window.setTimeout(() => {
+      setSettingsPanelOpen(panels.settings);
+    }, sidebarRestoreStep);
+    const restoreBackgroundPanel = window.setTimeout(() => {
+      setBackgroundPanelOpen(panels.background);
+      panelsAfterTransition.current = null;
+    }, sidebarRestoreStep * 2);
+
+    return () => {
+      window.clearTimeout(restoreSettingsPanel);
+      window.clearTimeout(restoreBackgroundPanel);
+    };
+  }, [transitionPhase]);
 
   useEffect(() => {
     const restoreTimer = window.setTimeout(() => {
@@ -344,7 +394,19 @@ export default function Lobby({
   }, []);
 
   const selectBackground = (src: string | null) => {
-    setBackground(src);
+    if (transitionPhase === "closing") {
+      pendingBackground.current = src;
+    } else if (src !== background) {
+      pendingBackground.current = src;
+      panelsAfterTransition.current = {
+        settings: settingsPanelOpen,
+        background: backgroundPanelOpen,
+      };
+      setSettingsPanelOpen(false);
+      setBackgroundPanelOpen(false);
+      setTransitionFrame(transitionImages.length - 1);
+      setTransitionPhase("closing");
+    }
     try {
       if (src) {
         window.localStorage.setItem(backgroundStorageKey, src);
@@ -380,6 +442,23 @@ export default function Lobby({
       className="lobby"
       style={background ? { backgroundImage: `url("${background}")` } : undefined}
     >
+      {transitionPhase !== null && (
+        <div className="screen-transition" aria-hidden="true">
+          {transitionImages.map((src, index) => (
+            <Image
+              key={src}
+              className={`screen-transition-frame${index === transitionFrame ? " is-active" : ""}`}
+              src={src}
+              alt=""
+              fill
+              sizes="100vw"
+              unoptimized
+              loading="eager"
+              draggable={false}
+            />
+          ))}
+        </div>
+      )}
       <header className="lobby-header">
         <div className="lobby-brand">
           {visibleElements.title && <p className="lobby-title">UMA <span>LOBBY</span></p>}
@@ -617,7 +696,10 @@ export default function Lobby({
                 {randomBackgroundOnRefresh ? "ON" : "OFF"}
               </span>
             </div>
-            <div className="background-options">
+            <div
+              className="background-options"
+              style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}
+            >
               <button
                 className={`background-option background-default${background === null ? " is-selected" : ""}`}
                 type="button"

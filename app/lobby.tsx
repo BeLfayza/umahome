@@ -16,8 +16,40 @@ type Background = {
   src: string;
 };
 
+type LobbyVisibility = {
+  title: boolean;
+  clock: boolean;
+  search: boolean;
+  count: boolean;
+  tagline: boolean;
+  characterNames: boolean;
+};
+
+const displaySettings: { key: keyof LobbyVisibility; label: string }[] = [
+  { key: "title", label: "Lobby title" },
+  { key: "clock", label: "Clock" },
+  { key: "search", label: "Search bar" },
+  { key: "count", label: "Character count" },
+  { key: "tagline", label: "Footer tagline" },
+  { key: "characterNames", label: "Character names" },
+];
+
+const defaultLobbyVisibility: LobbyVisibility = {
+  title: true,
+  clock: true,
+  search: true,
+  count: true,
+  tagline: true,
+  characterNames: true,
+};
+
 const backgroundStorageKey = "umahome-background";
 const randomBackgroundStorageKey = "umahome-random-background";
+const visibilityStorageKey = "umahome-visibility";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
 
 function randomBetween(min: number, max: number) {
   return Math.random() * (max - min) + min;
@@ -26,11 +58,14 @@ function randomBetween(min: number, max: number) {
 function CharacterSprite({
   character,
   initialPosition,
+  showName,
 }: {
   character: Character;
   initialPosition: number;
+  showName: boolean;
 }) {
   const [position, setPosition] = useState(initialPosition);
+  const [bottom, setBottom] = useState(18);
   const [walking, setWalking] = useState(false);
   const [facing, setFacing] = useState<"left" | "right">("right");
   const [walkDuration, setWalkDuration] = useState(4000);
@@ -63,12 +98,14 @@ function CharacterSprite({
 
       const distance = Math.abs(nextPosition - currentPosition) / 100 * viewportWidth;
       const duration = Math.max(1800, Math.min(8500, distance / 65 * 1000));
+      const nextBottom = randomBetween(4, 34);
 
       positionRef.current = nextPosition;
       setFacing(nextPosition < currentPosition ? "left" : "right");
       setWalkDuration(duration);
       setWalking(true);
       setPosition(nextPosition);
+      setBottom(nextBottom);
 
       timer = window.setTimeout(() => {
         if (cancelled) return;
@@ -93,6 +130,14 @@ function CharacterSprite({
 
   const characterStyle = {
     left: `${position}%`,
+    bottom: `${bottom}%`,
+    transform: `translateX(-50%) scale(${0.88 + ((bottom - 4) / 30) * 0.18})`,
+    transitionDuration: `${walkDuration}ms`,
+  };
+  const shadowStyle = {
+    left: `${position}%`,
+    bottom: `calc(${bottom}% + ${showName ? 20 : 0}px)`,
+    transform: `translateX(-50%) scale(${0.88 + ((bottom - 4) / 30) * 0.18})`,
     transitionDuration: `${walkDuration}ms`,
   };
   const characterContent = (
@@ -106,45 +151,61 @@ function CharacterSprite({
         loading="eager"
         draggable={false}
       />
-      <Image
-        className="lobby-character-shadow"
-        src="/bayangan.svg"
-        alt=""
-        aria-hidden
-        width={175}
-        height={48}
-        unoptimized
-        draggable={false}
-      />
-      <span>{character.name}</span>
+      {showName && <span>{character.name}</span>}
     </>
   );
 
   if (character.link) {
     return (
-      <a
-        className="lobby-character"
-        style={characterStyle}
-        aria-label={`Open ${character.name}`}
-        href={character.link}
-        target="_blank"
-        rel="noopener noreferrer"
-        onContextMenu={(event) => event.preventDefault()}
-      >
-        {characterContent}
-      </a>
+      <>
+        <div className="lobby-character-shadow" style={shadowStyle} aria-hidden="true">
+          <Image
+            className="lobby-shadow-image"
+            src="/bayangan.svg"
+            alt=""
+            width={175}
+            height={48}
+            unoptimized
+            draggable={false}
+          />
+        </div>
+        <a
+          className="lobby-character"
+          style={characterStyle}
+          aria-label={`Open ${character.name}`}
+          href={character.link}
+          target="_blank"
+          rel="noopener noreferrer"
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          {characterContent}
+        </a>
+      </>
     );
   }
 
   return (
-    <div
-      className="lobby-character"
-      style={characterStyle}
-      aria-label={character.name}
-      onContextMenu={(event) => event.preventDefault()}
-    >
-      {characterContent}
-    </div>
+    <>
+      <div className="lobby-character-shadow" style={shadowStyle} aria-hidden="true">
+        <Image
+          className="lobby-shadow-image"
+          src="/bayangan.svg"
+          alt=""
+          width={175}
+          height={48}
+          unoptimized
+          draggable={false}
+        />
+      </div>
+      <div
+        className="lobby-character"
+        style={characterStyle}
+        aria-label={character.name}
+        onContextMenu={(event) => event.preventDefault()}
+      >
+        {characterContent}
+      </div>
+    </>
   );
 }
 
@@ -158,7 +219,36 @@ export default function Lobby({
   const [clock, setClock] = useState("");
   const [background, setBackground] = useState<string | null>(null);
   const [backgroundPanelOpen, setBackgroundPanelOpen] = useState(false);
+  const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
   const [randomBackgroundOnRefresh, setRandomBackgroundOnRefresh] = useState(false);
+  const [visibleElements, setVisibleElements] = useState(defaultLobbyVisibility);
+
+  useEffect(() => {
+    const restoreTimer = window.setTimeout(() => {
+      try {
+        const savedVisibility = window.localStorage.getItem(visibilityStorageKey);
+        if (!savedVisibility) return;
+
+        const parsed: unknown = JSON.parse(savedVisibility);
+        if (!isRecord(parsed)) {
+          throw new Error("Saved visibility settings must be an object.");
+        }
+
+        const restoredVisibility = { ...defaultLobbyVisibility };
+        for (const { key } of displaySettings) {
+          const value = parsed[key];
+          if (typeof value === "boolean") {
+            restoredVisibility[key] = value;
+          }
+        }
+        setVisibleElements(restoredVisibility);
+      } catch (error) {
+        console.error("Unable to load saved visibility settings from browser storage.", error);
+      }
+    }, 0);
+
+    return () => window.clearTimeout(restoreTimer);
+  }, []);
 
   useEffect(() => {
     let restoreTimer: number | undefined;
@@ -238,6 +328,16 @@ export default function Lobby({
     }
   };
 
+  const toggleVisibility = (key: keyof LobbyVisibility) => {
+    const updatedVisibility = { ...visibleElements, [key]: !visibleElements[key] };
+    setVisibleElements(updatedVisibility);
+    try {
+      window.localStorage.setItem(visibilityStorageKey, JSON.stringify(updatedVisibility));
+    } catch (error) {
+      console.error("Unable to save visibility settings to browser storage.", error);
+    }
+  };
+
   return (
     <main
       className="lobby"
@@ -245,27 +345,33 @@ export default function Lobby({
     >
       <header className="lobby-header">
         <div className="lobby-brand">
-          <p className="lobby-title">UMA <span>LOBBY</span></p>
-          <time className="lobby-clock" aria-label="Local time">{clock || "--:--:--"}</time>
+          {visibleElements.title && <p className="lobby-title">UMA <span>LOBBY</span></p>}
+          {visibleElements.clock && (
+            <time className="lobby-clock" aria-label="Local time">{clock || "--:--:--"}</time>
+          )}
         </div>
-        <form className="google-search" action="https://www.google.com/search" method="get" role="search">
-          <label className="visually-hidden" htmlFor="google-search">Search Google</label>
-          <input
-            id="google-search"
-            name="q"
-            type="search"
-            placeholder="Search Google"
-            autoComplete="off"
-            required
-          />
-          <button type="submit" aria-label="Search Google">SEARCH</button>
-        </form>
-        <div className="lobby-meta">
-          <p className="lobby-count">
-            <span className="status-dot" />
-            {characters.length} {characters.length === 1 ? "CHARACTER" : "CHARACTERS"}
-          </p>
-        </div>
+        {visibleElements.search && (
+          <form className="google-search" action="https://www.google.com/search" method="get" role="search">
+            <label className="visually-hidden" htmlFor="google-search">Search Google</label>
+            <input
+              id="google-search"
+              name="q"
+              type="search"
+              placeholder="Search Google"
+              autoComplete="off"
+              required
+            />
+            <button type="submit" aria-label="Search Google">SEARCH</button>
+          </form>
+        )}
+        {visibleElements.count && (
+          <div className="lobby-meta">
+            <p className="lobby-count">
+              <span className="status-dot" />
+              {characters.length} {characters.length === 1 ? "CHARACTER" : "CHARACTERS"}
+            </p>
+          </div>
+        )}
       </header>
 
       <section className="lobby-scene" aria-label="Character lobby">
@@ -275,6 +381,7 @@ export default function Lobby({
               key={character.name}
               character={character}
               initialPosition={((index + 1) / (characters.length + 1)) * 100}
+              showName={visibleElements.characterNames}
             />
           ))
         ) : (
@@ -285,45 +392,125 @@ export default function Lobby({
       </section>
 
       <footer className="lobby-footer">
-        <span className="lobby-tagline">HANGING OUT · WALK · PAUSE · REPEAT</span>
+        {visibleElements.tagline && (
+          <span className="lobby-tagline">HANGING OUT · WALK · PAUSE · REPEAT</span>
+        )}
         <div className="footer-actions">
-          <a
-            className="github-link"
-            href="https://github.com/BeLfayza"
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label="Visit BeLfayza on GitHub"
+          <button
+            className="settings-button"
+            type="button"
+            aria-label="Open settings"
+            aria-expanded={settingsPanelOpen}
+            aria-controls="settings-panel"
+            onClick={() => setSettingsPanelOpen(true)}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path
-                fill="currentColor"
-                d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.09-.745.083-.729.083-.729 1.205.084 1.84 1.237 1.84 1.237 1.07 1.834 2.807 1.304 3.492.997.108-.775.418-1.305.762-1.605-2.665-.3-5.467-1.332-5.467-5.93 0-1.31.468-2.38 1.236-3.22-.124-.303-.536-1.523.117-3.176 0 0 1.008-.322 3.3 1.23.957-.266 1.983-.4 3.003-.405 1.02.005 2.046.139 3.006.405 2.29-1.552 3.296-1.23 3.296-1.23.655 1.653.243 2.873.12 3.176.77.84 1.233 1.91 1.233 3.22 0 4.61-2.807 5.626-5.48 5.92.43.372.814 1.103.814 2.222 0 1.606-.015 2.9-.015 3.293 0 .322.216.694.825.576C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12Z"
+                d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"
+              />
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.67 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"
               />
             </svg>
-          </a>
-          <button
-            className="change-background"
-            type="button"
-            aria-expanded={backgroundPanelOpen}
-            aria-controls="background-panel"
-            onClick={() => setBackgroundPanelOpen(true)}
-          >
-            CHANGE BACKGROUND
           </button>
         </div>
       </footer>
 
-      {backgroundPanelOpen && (
+      {(settingsPanelOpen || backgroundPanelOpen) && (
         <button
           className="background-overlay"
           type="button"
-          aria-label="Close background options"
-          onClick={() => setBackgroundPanelOpen(false)}
+          aria-label="Close settings"
+          onClick={() => {
+            setBackgroundPanelOpen(false);
+            setSettingsPanelOpen(false);
+          }}
         />
       )}
       <aside
+        id="settings-panel"
+        className={`settings-panel${settingsPanelOpen ? " is-open" : ""}`}
+        aria-label="Settings"
+        aria-hidden={!settingsPanelOpen}
+      >
+        {settingsPanelOpen && (
+          <>
+            <div className="settings-panel-header">
+              <h2>SETTINGS</h2>
+              <button
+                className="background-close"
+                type="button"
+                aria-label="Close settings"
+                onClick={() => setSettingsPanelOpen(false)}
+              >
+                ×
+              </button>
+            </div>
+            <section className="settings-section" aria-labelledby="display-settings-title">
+              <h3 id="display-settings-title" className="settings-section-title">DISPLAY</h3>
+              {displaySettings.map(({ key, label }) => (
+                <div className="visibility-option" key={key}>
+                  <span>{label}</span>
+                  <button
+                    className={`visibility-switch${visibleElements[key] ? " is-enabled" : ""}`}
+                    type="button"
+                    role="switch"
+                    aria-label={`Show ${label.toLowerCase()}`}
+                    aria-checked={visibleElements[key]}
+                    onClick={() => toggleVisibility(key)}
+                  >
+                    <span aria-hidden="true" />
+                  </button>
+                </div>
+              ))}
+              <p className="settings-note">Character sprites always stay visible.</p>
+            </section>
+            <div className="settings-actions">
+              <a
+                className="settings-link"
+                href="https://github.com/BeLfayza"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61-.546-1.387-1.333-1.756-1.333-1.756-1.09-.745.083-.729.083-.729 1.205.084 1.84 1.237 1.84 1.237 1.07 1.834 2.807 1.304 3.492.997.108-.775.418-1.305.762-1.605-2.665-.3-5.467-1.332-5.467-5.93 0-1.31.468-2.38 1.236-3.22-.124-.303-.536-1.523.117-3.176 0 0 1.008-.322 3.3 1.23.957-.266 1.983-.4 3.003-.405 1.02.005 2.046.139 3.006.405 2.29-1.552 3.296-1.23 3.296-1.23.655 1.653.243 2.873.12 3.176.77.84 1.233 1.91 1.233 3.22 0 4.61-2.807 5.626-5.48 5.92.43.372.814 1.103.814 2.222 0 1.606-.015 2.9-.015 3.293 0 .322.216.694.825.576C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12Z"
+                  />
+                </svg>
+                <span>GITHUB</span>
+              </a>
+              <button
+                className="change-background"
+                type="button"
+                aria-expanded={backgroundPanelOpen}
+                aria-controls="background-panel"
+                onClick={() => setBackgroundPanelOpen(true)}
+              >
+                CHANGE BACKGROUND
+              </button>
+              <div className="force-refresh-option">
+                <p className="force-refresh-description">
+                  Press CTRL + F5 if a new content is not loading
+                </p>
+              </div>
+            </div>
+          </>
+        )}
+      </aside>
+      <aside
         id="background-panel"
-        className={`background-panel${backgroundPanelOpen ? " is-open" : ""}`}
+        className={`background-panel${backgroundPanelOpen ? " is-open" : ""}${settingsPanelOpen ? " is-adjacent" : ""}`}
         aria-label="Background options"
         aria-hidden={!backgroundPanelOpen}
       >

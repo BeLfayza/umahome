@@ -126,33 +126,27 @@ function CharacterSprite({
       const minPosition = Math.max(5, edgeMargin);
       const maxPosition = Math.min(95, 100 - edgeMargin);
       const currentPosition = positionRef.current;
-      let nextPosition = randomBetween(minPosition, maxPosition);
-
+      const minTravelDistance = Math.min(12, (maxPosition - minPosition) / 2);
+      const canMoveLeft = currentPosition - minTravelDistance >= minPosition;
+      const canMoveRight = currentPosition + minTravelDistance <= maxPosition;
       const shouldReverse = facingRef.current !== null && Math.random() < 0.2;
-      if (shouldReverse) {
-        const reverseDirection = facingRef.current === "left" ? "right" : "left";
-        const hasRoomToReverse = reverseDirection === "left"
-          ? currentPosition > minPosition
-          : currentPosition < maxPosition;
-
-        if (hasRoomToReverse) {
-          nextPosition = reverseDirection === "left"
-            ? randomBetween(minPosition, currentPosition)
-            : randomBetween(currentPosition, maxPosition);
-        }
-      }
-
-      if (nextPosition === currentPosition) {
-        nextPosition = currentPosition === maxPosition ? minPosition : maxPosition;
-      }
+      const reverseDirection = facingRef.current === "left" ? "right" : "left";
+      const canReverse = reverseDirection === "left" ? canMoveLeft : canMoveRight;
+      const direction = shouldReverse && canReverse
+        ? reverseDirection
+        : canMoveLeft && canMoveRight
+          ? Math.random() < 0.5 ? "left" : "right"
+          : canMoveLeft ? "left" : "right";
+      const nextPosition = direction === "left"
+        ? randomBetween(minPosition, currentPosition - minTravelDistance)
+        : randomBetween(currentPosition + minTravelDistance, maxPosition);
 
       const duration = Math.floor(Math.random() * 15 + 1) * 1000;
       const nextBottom = randomBetween(4, 34);
-      const nextFacing = nextPosition < currentPosition ? "left" : "right";
 
       positionRef.current = nextPosition;
-      facingRef.current = nextFacing;
-      setFacing(nextFacing);
+      facingRef.current = direction;
+      setFacing(direction);
       setWalkDuration(duration);
       setWalking(true);
       setPosition(nextPosition);
